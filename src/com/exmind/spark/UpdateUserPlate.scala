@@ -111,14 +111,13 @@ object UpdateUserPlate {
     val sqlFunc = udf(updatePlateId _)
 
     // 查找用户位置
-    val userPosition = hiveContext.sql("from st_visitor_map_bak " +
+    val userPosition = hiveContext.sql("from st_visitor_map " +
                                        "select type, user_mac, longitude, latitude, " +
                                        "case_id, city, create_time, plate_id")
     val updatedPosition = userPosition.withColumn("plate_id", sqlFunc(col("longitude"), col("latitude")))
 
     hiveContext.sql("SET spark.sql.hive.convertMetastoreParquet=false")
-    // "st_plate_visitor_map"
-    updatedPosition.write.mode(SaveMode.Overwrite).saveAsTable("st_visitor_map_tmp")
+    updatedPosition.write.mode(SaveMode.Overwrite).saveAsTable("st_plate_visitor_map")
 
     spark.stop()
   }
