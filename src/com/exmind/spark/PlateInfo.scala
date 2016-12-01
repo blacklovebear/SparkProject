@@ -8,6 +8,7 @@ import org.apache.spark.sql.hive.HiveContext
 
 import scala.collection.mutable
 import scala.util.control.Breaks
+import scala.util.control.Exception.allCatch
 
 /**
   * Created by 38376 on 2016/11/30.
@@ -70,35 +71,42 @@ object PlateInfo {
     polygonMaxMinMap
   }
 
+  // 判断坐标是否为数字类型
+  def isDoubleNumber(s: String): Boolean = (allCatch opt s.toDouble).isDefined
+
   // 依据提供的板块信息，返回根据经纬度获得的板块ID
   def getUpdatePlateIdUDF(areaPolygonMap: mutable.HashMap[String, util.ArrayList[ElectronicFencePoint]],
                           polygonMaxMinMap: mutable.HashMap[String, Array[Float]] ): (String, String) => Int = {
     // 返回udf 使用的函数
     (longitude: String, latitude: String) => {
-      val electronicFence = new ElectronicFence()
-      val polygonCheckPoint = new ElectronicFencePoint(longitude, latitude)
-      val circleFence = new CircleFence()
-      val circleCheckPoint = new CircleFencePoint(longitude, latitude)
-      var finalPlateId = 0
+      if ( PlateInfo.isDoubleNumber(longitude) && PlateInfo.isDoubleNumber(latitude) ) {
+        val electronicFence = new ElectronicFence()
+        val polygonCheckPoint = new ElectronicFencePoint(longitude, latitude)
+        val circleFence = new CircleFence()
+        val circleCheckPoint = new CircleFencePoint(longitude, latitude)
+        var finalPlateId = 0
 
-      val loop = new Breaks
-      loop.breakable {
-        for ((plateId, polygon) <- areaPolygonMap) {
-          // 先模糊匹配，提高效率
-          val vagueCircle = PlateInfo.vagueCircle(polygonMaxMinMap(plateId))
-          val vagueCheckResult = circleFence.isIn(circleCheckPoint, vagueCircle)
+        val loop = new Breaks
+        loop.breakable {
+          for ((plateId, polygon) <- areaPolygonMap) {
+            // 先模糊匹配，提高效率
+            val vagueCircle = PlateInfo.vagueCircle(polygonMaxMinMap(plateId))
+            val vagueCheckResult = circleFence.isIn(circleCheckPoint, vagueCircle)
 
-          if (vagueCheckResult) {
-            val checkResult = electronicFence.InPolygon(polygon, polygonCheckPoint)
-            if (checkResult == 0) {
-              finalPlateId = plateId.toInt
-              loop.break
+            if (vagueCheckResult) {
+              val checkResult = electronicFence.InPolygon(polygon, polygonCheckPoint)
+              if (checkResult == 0) {
+                finalPlateId = plateId.toInt
+                loop.break
+              }
             }
           }
         }
-      }
 
-      finalPlateId
+        finalPlateId
+      }
+      else
+        0
     }
   }
 
