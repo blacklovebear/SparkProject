@@ -25,10 +25,10 @@ object UpdateProjectPlate {
   def main(args: Array[String]): Unit = {
     val conf = new SparkConf().setAppName("Spark for Hive")
     val sc = new SparkContext(conf)
-
-    val jdbcURL = "jdbc:mysql://"+ args(0) +":3306/masa"
-    val username = "masa"
-    val password = "masa"
+    //args = [host db username password]
+    val jdbcURL = s"jdbc:mysql://${args(0)}:3306/${args(1)}"
+    val username = args(2)
+    val password = args(3)
 
     val hiveContext = new HiveContext(sc)
     hiveContext.sql("use data_center")
@@ -54,16 +54,20 @@ object UpdateProjectPlate {
     val updatedProject = projectInfoDF.withColumn("plate_id", sqlFunc(col("lng"), col("lat")))
 
     val prop =  new Properties()
-    prop.setProperty("user","masa")
-    prop.setProperty("password","masa")
+    prop.setProperty("user",username)
+    prop.setProperty("password",password)
     prop.setProperty("characterEncoding","utf-8")
 
-    updatedProject.write.mode(SaveMode.Overwrite).jdbc("jdbc:mysql://"+ args(0) +":3306/masa", "bl_project_info_spark_tmp", prop)
 
     var connection:Connection = null
     try {
       connection = DriverManager.getConnection(jdbcURL, username, password)
       val statement = connection.createStatement()
+      // 创建临时表
+      statement.execute("create table if NOT EXISTS bl_project_info_spark_tmp as select * from bl_project_info where 1 > 2 ")
+      // 将数据写入临时表
+      updatedProject.write.mode(SaveMode.Overwrite).jdbc(jdbcURL, "bl_project_info_spark_tmp", prop)
+      // 用临时表的数据更新，结果表
       statement.execute(
         """
           | update bl_project_info a
@@ -85,7 +89,9 @@ object UpdateProjectPlate {
     sc.stop()
 
     // 172.18.84.81 spark用户下执行
-    // /usr/bin/spark-submit --jars $SPARK_HOME/lib/mysql-connector-java-5.1.30.jar
+    // /usr/bin/spark-submit --jars /usr/hdp/current/spark-client/lib/mysql-connector-java-5.1.30.jar
     // --master yarn-client --class com.exmind.spark.UpdateProjectPlate /home/spark/SparkProject.jar
+    // host db username password
+
   }
 }
