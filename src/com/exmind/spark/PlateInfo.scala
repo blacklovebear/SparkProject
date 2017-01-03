@@ -35,9 +35,9 @@ object PlateInfo {
   def getAreaPolygonMap(hiveContext: HiveContext): mutable.HashMap[String, util.ArrayList[ElectronicFencePoint]] = {
     val areaPolygonMap = new mutable.HashMap[String, util.ArrayList[ElectronicFencePoint]]()
 
-    hiveContext.sql("from fact_plate_geo " +
-      "select plate_id, coordinates_x, coordinates_y, sort " +
-      "order by plate_id, sort")
+    hiveContext.sql("from base_plate_coordinates " +
+      "select plate_id, lng, lat, sort_id " +
+      "order by plate_id, sort_id")
       .collect().foreach(row => {
       val plateId = row.get(0).toString
       val point = new ElectronicFencePoint(row.get(1).toString, row.get(2).toString)
@@ -58,9 +58,9 @@ object PlateInfo {
   def getPolygonMaxMinMap(hiveContext: HiveContext): mutable.HashMap[String, Array[Float]] = {
     val polygonMaxMinMap = new mutable.HashMap[String, Array[Float]]()
     // 获取区块的四个顶点
-    hiveContext.sql("from fact_plate_geo "+
-      "select plate_id, max(coordinates_x) max_x, min(coordinates_x) min_x, " +
-      "max(coordinates_y) max_y,min(coordinates_y) min_y " +
+    hiveContext.sql("from base_plate_coordinates "+
+      "select plate_id, max(lng) max_x, min(lng) min_x, " +
+      "max(lat) max_y,min(lat) min_y " +
       "group by plate_id")
       .collect().foreach(row => {
       val plateId = row.get(0).toString

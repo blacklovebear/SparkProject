@@ -42,11 +42,7 @@ object UpdateProjectPlate {
     val sqlContext = new SQLContext(sc)
     val projectInfoDF = sqlContext.read.format("jdbc")
       .options(Map("url" -> jdbcURL,
-                   "dbtable" ->
-                     """(select * from bl_project_info
-                       | where open_date >= date('1970-01-01')
-                       | and (plate_id is null OR plate_name is NULL)
-                       |) as tbl""".stripMargin,
+                   "dbtable" -> """(select id, plate_id, lng, lat from bl_project_info) as tbl""",
                    "driver" -> "com.mysql.jdbc.Driver",
                    "user" -> username,
                    "password" -> password)).load()
@@ -64,22 +60,43 @@ object UpdateProjectPlate {
       connection = DriverManager.getConnection(jdbcURL, username, password)
       val statement = connection.createStatement()
       // 创建临时表
-      statement.execute("create table if NOT EXISTS bl_project_info_spark_tmp as select * from bl_project_info where 1 > 2 ")
+      statement.execute("create table if NOT EXISTS bl_project_info_spark_tmp as select id, plate_id, lng, lat from bl_project_info where 1 > 2 ")
       // 将数据写入临时表
       updatedProject.write.mode(SaveMode.Overwrite).jdbc(jdbcURL, "bl_project_info_spark_tmp", prop)
       // 用临时表的数据更新，结果表
       statement.execute(
         """
-          | update bl_project_info a
+          |  update bl_project_info a
           |  join (
-          |        select a.id, a.plate_id, b.plate_name from bl_project_info_spark_tmp a
+          |        select a.id, a.plate_id, b.plate_name, b.district_id, c.district_name
+          |        from bl_project_info_spark_tmp a
           |        join base_plate b
           |        on a.plate_id = b.plate_id
+          |        join base_district c
+          |        on b.district_id = c.district_id
           |       ) b on a.id = b.id
           |    set a.plate_id = b.plate_id,
-          |      a.plate_name = b.plate_name
+          |      a.plate_name = b.plate_name,
+          |      a.district_id = b.district_id,
+          |      a.district_name = b.district_name
           |where (a.plate_id is null) OR (a.plate_name is NULL )
         """.stripMargin)
+      // 利用已经更新的bl_project_info表更新 其他的表
+      val updateTables = List("bl_deal_info", "bl_marketable_info", "bl_supply_info")
+      for(table <- updateTables){
+        statement.execute(
+          """
+            |update %s a
+            |   join bl_project_info b
+            |   on a.source_project_id = b.source_project_id
+            |     set a.plate_id = b.plate_id,
+            |      a.plate_name = b.plate_name,
+            |      a.district_id = b.district_id,
+            |      a.district_name = b.district_name
+            | where (a.plate_id is null) OR (a.plate_name is NULL ) or (a.district_id is null) or (a.district_name is NULL );
+          """.stripMargin.format(table) )
+      }
+
     } catch {
       case e: Throwable => e.printStackTrace()
     } finally {
