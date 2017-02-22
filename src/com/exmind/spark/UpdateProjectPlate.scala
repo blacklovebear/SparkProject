@@ -25,19 +25,15 @@ object UpdateProjectPlate {
   def main(args: Array[String]): Unit = {
     val conf = new SparkConf().setAppName("Spark for Hive")
     val sc = new SparkContext(conf)
-    //args = [host db username password]
+    // args = [host db username password]
     val jdbcURL = s"jdbc:mysql://${args(0)}:3306/${args(1)}"
     val username = args(2)
     val password = args(3)
 
     val hiveContext = new HiveContext(sc)
-    hiveContext.sql("use data_center")
 
-    val areaPolygonMap = PlateInfo.getAreaPolygonMap(hiveContext)
-    val polygonMaxMinMap = PlateInfo.getPolygonMaxMinMap(hiveContext)
-
-    val updatePlateFun= PlateInfo.getUpdatePlateIdUDF(areaPolygonMap, polygonMaxMinMap)
-    val sqlFunc = udf(updatePlateFun)
+    val plateInfo = new PlateLocate(hiveContext, "data_center")
+    val sqlFunc = udf(plateInfo.getUpdateIdUDF)
 
     val sqlContext = new SQLContext(sc)
     val projectInfoDF = sqlContext.read.format("jdbc")

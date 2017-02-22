@@ -19,15 +19,12 @@ object UpdateUserPlate {
     val spark = new SparkContext(conf)
 
     val hiveContext = new HiveContext(spark)
+
+    val plateInfo = new PlateLocate(hiveContext, "data_center")
+    val sqlFunc = udf(plateInfo.getUpdateIdUDF)
+
     hiveContext.sql("use data_center")
 
-    val areaPolygonMap = PlateInfo.getAreaPolygonMap(hiveContext)
-    val polygonMaxMinMap = PlateInfo.getPolygonMaxMinMap(hiveContext)
-
-    val updatePlateFun= PlateInfo.getUpdatePlateIdUDF(areaPolygonMap, polygonMaxMinMap)
-    val sqlFunc = udf(updatePlateFun)
-
-    // 查找用户位置
     val userPosition = hiveContext.sql("from st_visitor_map " +
                                        "select type, user_mac, longitude, latitude, " +
                                        "case_id, city, create_time, plate_id")
