@@ -33,7 +33,7 @@ object UpdateProjectPlate {
     val hiveContext = new HiveContext(sc)
 
     val plateInfo = new PlateLocate(hiveContext, "data_center")
-    val sqlFunc = udf(plateInfo.getUpdateIdUDF)
+    val sqlFunc = udf(plateInfo.getBelongColUDF[Int])
 
     val sqlContext = new SQLContext(sc)
     val projectInfoDF = sqlContext.read.format("jdbc")
@@ -43,7 +43,7 @@ object UpdateProjectPlate {
                    "user" -> username,
                    "password" -> password)).load()
 
-    val updatedProject = projectInfoDF.withColumn("plate_id", sqlFunc(col("lng"), col("lat")))
+    val updatedProject = projectInfoDF.withColumn("plate_id", sqlFunc(col("lng"), col("lat"), col("plate_id")))
 
     val prop =  new Properties()
     prop.setProperty("user",username)

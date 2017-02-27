@@ -24,13 +24,13 @@ object UpdateMacPlate {
     hiveContext.sql("SET spark.sql.parquet.mergeSchema=true")
 
     val plateInfo = new PlateLocate(hiveContext, "data_center")
-    val sqlFunc = udf(plateInfo.getUpdateIdUDF)
+    val sqlFunc = udf(plateInfo.getBelongColUDF[Int])
 
     hiveContext.sql("use data_center")
 
     val macInfo = hiveContext.sql(" from td_geo_info_final " +
       " select mac, work_longitude, work_latitude, type, 0 plate_id ")
-    val updateInfo = macInfo.withColumn("plate_id", sqlFunc(col("work_longitude"), col("work_latitude")))
+    val updateInfo = macInfo.withColumn("plate_id", sqlFunc(col("work_longitude"), col("work_latitude"), col("plate_id")))
 
     val plateDistrict = hiveContext.sql(" from base_plate " +
                                         " select plate_id as p_id, district_id")

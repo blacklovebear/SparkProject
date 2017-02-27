@@ -21,14 +21,14 @@ object UpdateUserPlate {
     val hiveContext = new HiveContext(spark)
 
     val plateInfo = new PlateLocate(hiveContext, "data_center")
-    val sqlFunc = udf(plateInfo.getUpdateIdUDF)
+    val sqlFunc = udf(plateInfo.getBelongColUDF[Int])
 
     hiveContext.sql("use data_center")
 
     val userPosition = hiveContext.sql("from st_visitor_map " +
                                        "select type, user_mac, longitude, latitude, " +
                                        "case_id, city, create_time, plate_id")
-    val updatedPosition = userPosition.withColumn("plate_id", sqlFunc(col("longitude"), col("latitude")))
+    val updatedPosition = userPosition.withColumn("plate_id", sqlFunc(col("longitude"), col("latitude"), col("plate_id")))
 
     hiveContext.sql("SET spark.sql.hive.convertMetastoreParquet=false")
     updatedPosition.write.mode(SaveMode.Overwrite).saveAsTable("st_plate_visitor_map")

@@ -20,16 +20,22 @@ object UpdateMacHomeConsumeCycle {
     hiveContext.sql("SET spark.sql.parquet.mergeSchema=true")
 
     val cycleLocate= new ConsumeCycleLocate(hiveContext, "masa_td")
-    val sqlFunc = udf(cycleLocate.getUpdateNameUDF)
+
+    val sqlFunc = udf(cycleLocate.getNearestColUDF[String])
 
     hiveContext.sql("use masa_td")
-
-    val macInfo = hiveContext.sql(" from td_home_geospatial_new " +
+    // update home consume cycle
+    val homeMac = hiveContext.sql(" from td_home_geospatial_new " +
                   " select mac, home_longitude, home_latitude, type, '' consume_cycle ")
+    val homeUpdate = homeMac.withColumn("consume_cycle", sqlFunc(col("home_longitude"), col("home_latitude"), col("consume_cycle")))
+    homeUpdate.write.mode(SaveMode.Overwrite).saveAsTable("td_home_geospatial_consume_cycle")
 
-    val updateInfo = macInfo.withColumn("consume_cycle", sqlFunc(col("home_longitude"), col("home_latitude")))
+    // update work consume cycle
+    val workMac = hiveContext.sql(" from td_work_geospatial_new " +
+      " select mac, work_longitude, work_latitude, type, '' consume_cycle ")
+    val workUpdate = workMac.withColumn("consume_cycle", sqlFunc(col("work_longitude"), col("work_latitude"), col("consume_cycle")))
+    workUpdate.write.mode(SaveMode.Overwrite).saveAsTable("td_work_geospatial_consume_cycle")
 
-    updateInfo.write.mode(SaveMode.Overwrite).saveAsTable("td_home_geospatial_test")
 
     spark.stop()
   }

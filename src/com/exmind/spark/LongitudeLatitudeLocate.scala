@@ -19,8 +19,8 @@ abstract class LongitudeLatitudeLocate (val hContext: HiveContext, val databaseN
   hiveContext.sql( s"use $databaseName" )
 
   // keep map relation
-  val areaPolygonMap: mutable.HashMap[String, util.ArrayList[ElectronicFencePoint]]= _getAreaPolygonMap(hiveContext)
-  val polygonMaxMinMap: mutable.HashMap[String, Array[Float]] = _getPolygonMaxMinMap(hiveContext)
+  private val areaPolygonMap: mutable.HashMap[String, util.ArrayList[ElectronicFencePoint]]= _getAreaPolygonMap(hiveContext)
+  private val polygonMaxMinMap: mutable.HashMap[String, Array[Float]] = _getPolygonMaxMinMap(hiveContext)
 
 
   // get fuzzy matching cycle
@@ -40,6 +40,7 @@ abstract class LongitudeLatitudeLocate (val hContext: HiveContext, val databaseN
     circle
   }
 
+
   def _isDoubleNumber(s: String): Boolean = (allCatch opt s.toDouble).isDefined
 
   // overwrite by child
@@ -48,15 +49,63 @@ abstract class LongitudeLatitudeLocate (val hContext: HiveContext, val databaseN
   // overwrite by child
   def _getPolygonMaxMinMap(hiveContext: HiveContext): mutable.HashMap[String, Array[Float]]
 
-  // use longitude and latitude locate place and return Int
-  def getUpdateIdUDF: (String, String) => Int = {
-    (longitude: String, latitude: String) => {
+  // get nearest location
+  def getNearestColUDF[T]: (String, String, T) => T = {
+    (longitude: String, latitude: String, returnType: T) => {
+      var minDistance: Float = Float.MaxValue
+      var minKey = ""
+
+      if ( _isDoubleNumber(longitude) && _isDoubleNumber(latitude) ) {
+        val circleFence = new CircleFence()
+        val circleCheckPoint = new CircleFencePoint(longitude, latitude)
+
+        val loop = new Breaks
+        loop.breakable {
+          for ((key, polygon) <- areaPolygonMap) {
+            // first use fuzzy matching improve matching efficiency
+            val vagueCircle = _vagueCircle(polygonMaxMinMap(key))
+            val vagueCheckResult = circleFence.isIn(circleCheckPoint, vagueCircle)
+
+            if (vagueCheckResult) {
+              minKey = key
+              minDistance = 0
+              loop.break
+            } else {
+              val distance = circleFence.getDistance(circleCheckPoint, vagueCircle.getCenter())
+              if (distance < minDistance) {
+                minDistance = distance
+                minKey = key
+              }
+            }
+
+          }
+        }
+      }
+
+      (returnType match {
+        case returnType: String => minKey
+        case returnType: Int =>
+          try {
+            minKey.toInt
+          } catch {
+            case e: NumberFormatException => 0
+          }
+      }).asInstanceOf[T]
+
+    }
+  }
+
+  // use longitude and latitude locate place
+  def getBelongColUDF[T]: (String, String, T) => T = {
+
+    (longitude: String, latitude: String, returnType: T) => {
+      var returnValue = ""
+
       if ( _isDoubleNumber(longitude) && _isDoubleNumber(latitude) ) {
         val electronicFence = new ElectronicFence()
         val polygonCheckPoint = new ElectronicFencePoint(longitude, latitude)
         val circleFence = new CircleFence()
         val circleCheckPoint = new CircleFencePoint(longitude, latitude)
-        var returnValue = 0
 
         val loop = new Breaks
         loop.breakable {
@@ -68,51 +117,24 @@ abstract class LongitudeLatitudeLocate (val hContext: HiveContext, val databaseN
             if (vagueCheckResult) {
               val checkResult = electronicFence.InPolygon(polygon, polygonCheckPoint)
               if (checkResult == 0) {
-                returnValue = key.toInt
+                returnValue = key
                 loop.break
               }
             }
           }
         }
-
-        returnValue
       }
-      else
-        0
-    }
-  }
 
-  // use longitude and latitude locate place and return String
-  def getUpdateNameUDF: (String, String) => String = {
-    (longitude: String, latitude: String) => {
-      if ( _isDoubleNumber(longitude) && _isDoubleNumber(latitude) ) {
-        val electronicFence = new ElectronicFence()
-        val polygonCheckPoint = new ElectronicFencePoint(longitude, latitude)
-        val circleFence = new CircleFence()
-        val circleCheckPoint = new CircleFencePoint(longitude, latitude)
-        var returnValue = ""
-
-        val loop = new Breaks
-        loop.breakable {
-          for ((plateId, polygon) <- areaPolygonMap) {
-            // first use fuzzy matching improve matching efficiency
-            val vagueCircle = _vagueCircle(polygonMaxMinMap(plateId))
-            val vagueCheckResult = circleFence.isIn(circleCheckPoint, vagueCircle)
-
-            if (vagueCheckResult) {
-              val checkResult = electronicFence.InPolygon(polygon, polygonCheckPoint)
-              if (checkResult == 0) {
-                returnValue = plateId
-                loop.break
-              }
-            }
+      (returnType match {
+        case returnType: String => returnValue
+        case returnType: Int =>
+          try {
+            returnValue.toInt
+          } catch {
+            case e: NumberFormatException => 0
           }
-        }
+      }).asInstanceOf[T]
 
-        returnValue
-      }
-      else
-        ""
     }
   }
 
